@@ -177,4 +177,3 @@ if __name__ == "__main__":
     metrics = evaluate_rec_systems()
     print(f"Accuracy (случайные рекомендации): {metrics['random_accuracy']:.4f}")
     print(f"Accuracy (популярные фильмы): {metrics['popular_accuracy']:.4f}")
-
