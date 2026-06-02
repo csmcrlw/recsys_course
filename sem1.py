@@ -62,7 +62,38 @@ def top_n_recommend(
     Returns:
         Список кортежей (movieId, avg_rating, rating_count, title).
     """
-    raise(NotImplementedError("Реализуйте функцию top_n_recommend"))
+    ratings_df, movies_df = load_data()
+
+    movie_stats = (
+        ratings_df.groupby("movieId")["rating"]
+        .agg(avg_rating="mean", rating_count="count")
+        .reset_index()
+    )
+
+    movie_stats = movie_stats[
+        movie_stats["rating_count"] >= min_ratings
+    ]
+
+    movie_stats = movie_stats.merge(
+        movies_df[["movieId", "title"]],
+        on="movieId",
+        how="left",
+    )
+
+    top_movies = movie_stats.sort_values(
+        by=["avg_rating", "rating_count"],
+        ascending=[False, False],
+    ).head(n_recommendations)
+
+    return [
+        (
+            int(row.movieId),
+            float(row.avg_rating),
+            int(row.rating_count),
+            str(row.title),
+        )
+        for row in top_movies.itertuples(index=False)
+    ]
 
 
 def evaluate_rec_systems(
@@ -86,7 +117,38 @@ def evaluate_rec_systems(
     Returns:
         Словарь {'random_accuracy', 'popular_accuracy'}.
     """
-    raise(NotImplementedError("Реализуйте функцию evaluate_rec_systems"))
+    ratings_df, _ = load_data()
+
+    random_recs = random_recommend(
+        n_recommendations=n_recommendations,
+        seed=random_state,
+    )
+
+    popular_recs = top_n_recommend(
+        n_recommendations=n_recommendations,
+    )
+
+    user_movies = set(
+        ratings_df.loc[
+            ratings_df["userId"] == user_id,
+            "movieId",
+        ]
+    )
+
+    random_hits = sum(
+        movie_id in user_movies
+        for movie_id in random_recs
+    )
+
+    popular_hits = sum(
+        movie_id in user_movies
+        for movie_id, _, _, _ in popular_recs
+    )
+
+    return {
+        "random_accuracy": random_hits / n_recommendations,
+        "popular_accuracy": popular_hits / n_recommendations,
+    }
 
 
 if __name__ == "__main__":
@@ -115,3 +177,4 @@ if __name__ == "__main__":
     metrics = evaluate_rec_systems()
     print(f"Accuracy (случайные рекомендации): {metrics['random_accuracy']:.4f}")
     print(f"Accuracy (популярные фильмы): {metrics['popular_accuracy']:.4f}")
+
