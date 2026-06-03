@@ -42,7 +42,16 @@ def jaccard_similarity(a: np.array, b: np.array) -> float:
 
     Это значение в диапазоне [0,1].
     """
-    raise(NotImplementedError("Реализуйте функцию jaccard_similarity"))
+    a_mask = a > 0
+    b_mask = b > 0
+
+    intersection = np.logical_and(a_mask, b_mask).sum()
+    union = np.logical_or(a_mask, b_mask).sum()
+
+    if union == 0:
+        return 0.0
+
+    return float(intersection / union)
 
 
 def build_user_user_matrix(user_item_matrix: np.ndarray) -> np.ndarray:
@@ -65,7 +74,23 @@ def build_user_user_matrix(user_item_matrix: np.ndarray) -> np.ndarray:
     Returns:
         Матрица схожести Жаккара (n_users, n_users).
     """
-    raise(NotImplementedError("Реализуйте функцию build_user_user_matrix"))
+    x = (user_item_matrix > 0).astype(int)
+
+    intersection = x @ x.T
+
+    row_sums = x.sum(axis=1)
+    union = row_sums[:, None] + row_sums[None, :] - intersection
+
+    similarity_matrix = np.divide(
+        intersection,
+        union,
+        out=np.zeros_like(intersection, dtype=float),
+        where=union != 0,
+    )
+
+    np.fill_diagonal(similarity_matrix, 1.0)
+
+    return similarity_matrix
 
 
 def predict_rating(
@@ -98,7 +123,30 @@ def predict_rating(
     Returns:
         Предсказанный рейтинг (float).
     """
-    raise(NotImplementedError("Реализуйте функцию predict_rating"))
+    item_ratings = user_item_matrix[:, item_id]
+    similarities = user_user_matrix[user_id]
+
+    rated_users = np.where(item_ratings > 0)[0]
+
+    if len(rated_users) == 0:
+        return 0.0
+
+    rated_similarities = similarities[rated_users]
+    rated_ratings = item_ratings[rated_users]
+
+    top_indices = np.argsort(rated_similarities)[::-1][:topk]
+
+    top_similarities = rated_similarities[top_indices]
+    top_ratings = rated_ratings[top_indices]
+
+    sum_sim = top_similarities.sum()
+
+    if sum_sim == 0:
+        return 0.0
+
+    predicted_rating = np.dot(top_similarities, top_ratings) / sum_sim
+
+    return float(predicted_rating)
 
 
 def predict_items_for_user(
@@ -133,7 +181,40 @@ def predict_items_for_user(
     Returns:
         Список рекомендованных индексов фильмов (item_id).
     """
-    raise(NotImplementedError("Реализуйте функцию predict_items_for_user"))
+    user_item_matrix = np.array(user_item_matrix)
+
+    similarities = user_user_matrix[user_id].copy()
+
+    similarities[user_id] = -1
+    top_r_neighbors = np.argsort(similarities)[-r:]
+
+    items_ratings = {}
+
+    for neighbor in top_r_neighbors:
+        neighbor_ratings = user_item_matrix[neighbor]
+
+        for item_id, rating in enumerate(neighbor_ratings):
+            if rating < 4.0:
+                continue
+
+            items_ratings.setdefault(item_id, []).append(rating)
+
+    rated_mask = user_item_matrix[user_id] > 0
+
+    candidates = {}
+    for item_id, ratings in items_ratings.items():
+        if rated_mask[item_id]:
+            continue
+
+        candidates[item_id] = sum(ratings) / len(ratings)
+
+    sorted_items = sorted(
+        candidates,
+        key=lambda movie_id: candidates[movie_id],
+        reverse=True,
+    )
+
+    return [int(item_id) for item_id in sorted_items[:k]]
 
 
 if __name__ == "__main__":
@@ -166,7 +247,6 @@ if __name__ == "__main__":
     toc = time()
     print(f"Время предсказания рейтинга: {toc - tic:.2f} секунд")
 
-    # Предсказание списка 5 фильмов с помощью коллаборативной фильтрации
     print("Предсказываем список из 5 фильмов для пользователя")
     tic = time()
     recomendations = predict_items_for_user(
